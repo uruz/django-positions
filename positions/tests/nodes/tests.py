@@ -1,8 +1,7 @@
+from __future__ import unicode_literals
 from django.test import TestCase
-from positions.examples.nodes.models import Node
-import doctest
-import os
-import unittest
+from positions.tests.nodes.models import Node
+from functools import partial
 
 class NodesTestCase(TestCase):
 
@@ -39,7 +38,7 @@ class NodesTestCase(TestCase):
         Tests the tree structure
         """
         tree = list(Node.objects.order_by('parent__position', 'position').values_list('name', 'position'))
-        self.assertEqual(tree, [(u'Parent 1', 0), (u'Parent 2', 1), (u'Child 2', 0), (u'Child 1', 1), (u'Child 3', 2), (u'Child 4', 0), (u'Child 5', 1), (u'Child 6', 2)])
+        self.assertEqual(tree, [('Parent 1', 0), ('Parent 2', 1), ('Child 2', 0), ('Child 1', 1), ('Child 3', 2), ('Child 4', 0), ('Child 5', 1), ('Child 6', 2)])
 
     def test_collection_field_change_sibling_position(self):
         """
@@ -49,7 +48,7 @@ class NodesTestCase(TestCase):
         self.child6.save()
 
         tree = list(Node.objects.order_by('parent__position', 'position').values_list('name', 'position'))
-        self.assertEqual(tree, [(u'Parent 1', 0), (u'Parent 2', 1), (u'Child 2', 0), (u'Child 1', 1), (u'Child 3', 2), (u'Child 6', 0), (u'Child 4', 1), (u'Child 5', 2)])
+        self.assertEqual(tree, [('Parent 1', 0), ('Parent 2', 1), ('Child 2', 0), ('Child 1', 1), ('Child 3', 2), ('Child 6', 0), ('Child 4', 1), ('Child 5', 2)])
 
     def test_collection_field_change_first_child(self):
         """
@@ -60,7 +59,7 @@ class NodesTestCase(TestCase):
         self.child2.save()
 
         tree = list(Node.objects.order_by('parent__position', 'position').values_list('name', 'position'))
-        self.assertEqual(tree, [(u'Parent 1', 0), (u'Parent 2', 1), (u'Child 1', 0), (u'Child 3', 1), (u'Child 2', 0), (u'Child 4', 1), (u'Child 5', 2), (u'Child 6', 3)])
+        self.assertEqual(tree, [('Parent 1', 0), ('Parent 2', 1), ('Child 1', 0), ('Child 3', 1), ('Child 2', 0), ('Child 4', 1), ('Child 5', 2), ('Child 6', 3)])
 
     def test_collection_field_change_last_child(self):
         """
@@ -72,7 +71,7 @@ class NodesTestCase(TestCase):
         self.child2.save()
 
         tree = list(Node.objects.order_by('parent__position', 'position').values_list('name', 'position'))
-        self.assertEqual(tree, [(u'Parent 1', 0), (u'Parent 2', 1), (u'Child 1', 0), (u'Child 3', 1), (u'Child 4', 0), (u'Child 5', 1), (u'Child 6', 2), (u'Child 2', 3)])
+        self.assertEqual(tree, [('Parent 1', 0), ('Parent 2', 1), ('Child 1', 0), ('Child 3', 1), ('Child 4', 0), ('Child 5', 1), ('Child 6', 2), ('Child 2', 3)])
 
     def test_collection_field_change_sibling_1(self):
         """
@@ -84,7 +83,7 @@ class NodesTestCase(TestCase):
         self.child2.save()
 
         tree = list(Node.objects.order_by('parent__position', 'position').values_list('name', 'position'))
-        self.assertEqual(tree, [(u'Parent 1', 0), (u'Parent 2', 1), (u'Child 1', 0), (u'Child 3', 1), (u'Child 4', 0), (u'Child 2', 1), (u'Child 5', 2), (u'Child 6', 3)])
+        self.assertEqual(tree, [('Parent 1', 0), ('Parent 2', 1), ('Child 1', 0), ('Child 3', 1), ('Child 4', 0), ('Child 2', 1), ('Child 5', 2), ('Child 6', 3)])
 
     def test_collection_field_change_sibling_2(self):
         """
@@ -96,7 +95,7 @@ class NodesTestCase(TestCase):
         self.child2.save()
 
         tree = list(Node.objects.order_by('parent__position', 'position').values_list('name', 'position'))
-        self.assertEqual(tree, [(u'Parent 1', 0), (u'Parent 2', 1), (u'Child 1', 0), (u'Child 3', 1), (u'Child 4', 0), (u'Child 5', 1), (u'Child 2', 2), (u'Child 6', 3)])
+        self.assertEqual(tree, [('Parent 1', 0), ('Parent 2', 1), ('Child 1', 0), ('Child 3', 1), ('Child 4', 0), ('Child 5', 1), ('Child 2', 2), ('Child 6', 3)])
 
     def test_collection_field_change_sibling_3(self):
         """
@@ -108,7 +107,7 @@ class NodesTestCase(TestCase):
         self.child2.save()
 
         tree = list(Node.objects.order_by('parent__position', 'position').values_list('name', 'position'))
-        self.assertEqual(tree, [(u'Parent 1', 0), (u'Parent 2', 1), (u'Child 1', 0), (u'Child 3', 1), (u'Child 4', 0), (u'Child 5', 1), (u'Child 6', 2), (u'Child 2', 3)])
+        self.assertEqual(tree, [('Parent 1', 0), ('Parent 2', 1), ('Child 1', 0), ('Child 3', 1), ('Child 4', 0), ('Child 5', 1), ('Child 6', 2), ('Child 2', 3)])
 
     def test_deletion_1(self):
         """
@@ -116,7 +115,7 @@ class NodesTestCase(TestCase):
         """
         self.child2.delete()
         tree = list(Node.objects.order_by('parent__position', 'position').values_list('name', 'position'))
-        self.assertEqual(tree, [(u'Parent 1', 0), (u'Parent 2', 1), (u'Child 1', 0), (u'Child 3', 1), (u'Child 4', 0), (u'Child 5', 1), (u'Child 6', 2)])
+        self.assertEqual(tree, [('Parent 1', 0), ('Parent 2', 1), ('Child 1', 0), ('Child 3', 1), ('Child 4', 0), ('Child 5', 1), ('Child 6', 2)])
 
     def test_deletion_2(self):
         """
@@ -124,7 +123,7 @@ class NodesTestCase(TestCase):
         """
         self.child3.delete()
         tree = list(Node.objects.order_by('parent__position', 'position').values_list('name', 'position'))
-        self.assertEqual(tree, [(u'Parent 1', 0), (u'Parent 2', 1), (u'Child 2', 0), (u'Child 1', 1), (u'Child 4', 0), (u'Child 5', 1), (u'Child 6', 2)])
+        self.assertEqual(tree, [('Parent 1', 0), ('Parent 2', 1), ('Child 2', 0), ('Child 1', 1), ('Child 4', 0), ('Child 5', 1), ('Child 6', 2)])
 
     def test_deletion_3(self):
         """
@@ -132,7 +131,7 @@ class NodesTestCase(TestCase):
         """
         self.child1.delete()
         tree = list(Node.objects.order_by('parent__position', 'position').values_list('name', 'position'))
-        self.assertEqual(tree, [(u'Parent 1', 0), (u'Parent 2', 1), (u'Child 2', 0), (u'Child 3', 1), (u'Child 4', 0), (u'Child 5', 1), (u'Child 6', 2)])
+        self.assertEqual(tree, [('Parent 1', 0), ('Parent 2', 1), ('Child 2', 0), ('Child 3', 1), ('Child 4', 0), ('Child 5', 1), ('Child 6', 2)])
 
     def test_deletion_4(self):
         """
@@ -140,10 +139,62 @@ class NodesTestCase(TestCase):
         """
         self.parent1.delete()
         tree = list(Node.objects.order_by('parent__position', 'position').values_list('name', 'position'))
-        self.assertEqual(tree, [(u'Parent 2', 0), (u'Child 4', 0), (u'Child 5', 1), (u'Child 6', 2)])
+        self.assertEqual(tree, [('Parent 2', 0), ('Child 4', 0), ('Child 5', 1), ('Child 6', 2)])
 
-def suite():
-    s = unittest.TestSuite()
-    s.addTest(unittest.TestLoader().loadTestsFromTestCase(NodesTestCase))
-    s.addTest(doctest.DocFileSuite(os.path.join('doctests', 'nodes.txt'), optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
-    return s
+class NodesTestCase2(TestCase):
+    def assertQuerysetEqual(self, qs, values, transform=tuple, ordered=True):
+        '''assertQuerysetEqual with transform default changed from `repr` to `tuple`''' 
+        return super(NodesTestCase2, self).assertQuerysetEqual(qs, values, transform, ordered)
+    
+    def test_nodes(self):
+        # create some parent nodes
+        Node.objects.create(name='Parent 1')
+        qs = Node.objects.order_by('position').values_list('name', 'position')
+        self.assertQuerysetEqual(qs, [('Parent 1', 0)])
+        Node.objects.create(name='Parent 2')
+        qs = Node.objects.order_by('position').values_list('name', 'position')
+        self.assertQuerysetEqual(qs, [('Parent 1', 0), ('Parent 2', 1)])
+        parent3 = Node.objects.create(name='Parent 3', position=0)
+        qs = Node.objects.order_by('position').values_list('name', 'position')
+        self.assertQuerysetEqual(qs, [('Parent 3', 0), ('Parent 1', 1), ('Parent 2', 2)])
+        parent3.position = 999
+        parent3.save()
+        qs = Node.objects.order_by('position').values_list('name', 'position')
+        self.assertQuerysetEqual(qs, [('Parent 1', 0), ('Parent 2', 1), ('Parent 3', 2)])
+        parent3.position = -2
+        parent3.save()
+        qs = Node.objects.order_by('position').values_list('name', 'position')
+        self.assertQuerysetEqual(qs, [('Parent 1', 0), ('Parent 3', 1), ('Parent 2', 2)])
+        parent3.delete()
+        qs = Node.objects.order_by('position').values_list('name', 'position')
+        self.assertQuerysetEqual(qs, [('Parent 1', 0), ('Parent 2', 1)])
+        # create some children
+        parent1 = Node.objects.order_by('position')[0]
+        parent1.children.create(name='Child 1')
+        qs = Node.objects.order_by('parent__position', 'position').values_list('name', 'position')
+        self.assertQuerysetEqual(qs, [('Parent 1', 0), ('Parent 2', 1), ('Child 1', 0)])
+        child2 = parent1.children.create(name='Child 2')
+        qs = Node.objects.order_by('parent__position', 'position').values_list('name', 'position')
+        self.assertQuerysetEqual(qs, [('Parent 1', 0), ('Parent 2', 1), ('Child 1', 0), ('Child 2', 1)])
+        child2.position = 0
+        child2.save()
+        qs = Node.objects.order_by('parent__position', 'position').values_list('name', 'position')
+        self.assertQuerysetEqual(qs, [('Parent 1', 0), ('Parent 2', 1), ('Child 2', 0), ('Child 1', 1)])
+        parent2 = Node.objects.filter(parent__isnull=True).order_by('position')[1]
+        self.assertEqual(parent2.name, 'Parent 2')
+        
+        parent1.children.create(name='Child 3')
+        parent2.children.create(name='Child 4')
+        parent2.children.create(name='Child 5')
+        parent2.children.create(name='Child 6')
+        qs = Node.objects.order_by('parent__position', 'position').values_list('name', 'position')
+        self.assertQuerysetEqual(qs, [('Parent 1', 0), ('Parent 2', 1), ('Child 2', 0), ('Child 1', 1), ('Child 3', 2), ('Child 4', 0), ('Child 5', 1), ('Child 6', 2)])
+        #Move nodes around
+        child2 = Node.objects.get(pk=child2.pk)
+        child2.position = 0
+        child2.parent = Node.objects.get(pk=parent2.pk)
+        setattr(child2, "_debug", True)
+        child2.save()
+        qs = Node.objects.order_by('parent__position', 'position').values_list('name', 'position')
+        self.assertQuerysetEqual(qs, [('Parent 1', 0), ('Parent 2', 1), ('Child 1', 0), ('Child 3', 1), ('Child 2', 0), ('Child 4', 1), ('Child 5', 2), ('Child 6', 3)])
+        
