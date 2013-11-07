@@ -9,14 +9,14 @@ DATABASES = {
 
 INSTALLED_APPS = (
     'django.contrib.contenttypes',
-    'positions.examples.lists',
-    'positions.examples.nodes',
-    'positions.examples.generic',
-    'positions.examples.todo',
-    'positions.examples.store',
-    'positions.examples.photos',
-    'positions.examples.school',
-    'positions.examples.restaurants',
+    'positions.tests.lists',
+    'positions.tests.nodes',
+    'positions.tests.generic',
+    'positions.tests.todo',
+    'positions.tests.store',
+    'positions.tests.photos',
+    'positions.tests.school',
+    'positions.tests.restaurants',
 )
 
 TEST_RUNNER = 'django_nose.NoseTestSuiteRunner'
