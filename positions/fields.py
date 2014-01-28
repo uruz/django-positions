@@ -38,7 +38,6 @@ class PositionField(models.IntegerField):
             collection = (collection,)
         self.collection = collection
         self.parent_link = parent_link
-        self._collection_changed =  None
 
     def contribute_to_class(self, cls, name):
         super(PositionField, self).contribute_to_class(cls, name)
@@ -73,12 +72,11 @@ class PositionField(models.IntegerField):
         if not collection_changed:
             previous_instance = None
 
-        self._collection_changed = collection_changed
         if collection_changed:
             self.remove_from_collection(previous_instance)
 
         cache_name = self.get_cache_name()
-        current, updated = getattr(model_instance, cache_name)
+        current, updated, _ = getattr(model_instance, cache_name)
 
         if collection_changed:
             current = None
@@ -101,7 +99,7 @@ class PositionField(models.IntegerField):
 
         # new instance; appended; no cleanup required on post_save
         if add and (updated == -1 or updated >= max_position):
-            setattr(model_instance, cache_name, (max_position, None))
+            setattr(model_instance, cache_name, (max_position, None, collection_changed))
             return max_position
 
         if max_position >= updated >= min_position:
@@ -122,13 +120,13 @@ class PositionField(models.IntegerField):
             position = min_position
 
         # instance inserted; cleanup required on post_save
-        setattr(model_instance, cache_name, (current, position))
+        setattr(model_instance, cache_name, (current, position, collection_changed))
         return position
 
     def __get__(self, instance, owner):
         if instance is None:
             raise AttributeError("%s must be accessed via instance." % self.name)
-        current, updated = getattr(instance, self.get_cache_name())
+        current, updated, _ = getattr(instance, self.get_cache_name())
         return current if updated is None else updated
 
     def __set__(self, instance, value):
@@ -138,12 +136,12 @@ class PositionField(models.IntegerField):
             value = self.default
         cache_name = self.get_cache_name()
         try:
-            current, updated = getattr(instance, cache_name)
+            current, updated, collection_changed = getattr(instance, cache_name)
         except AttributeError:
-            current, updated = value, None
+            current, updated, collection_changed = value, None, False
         else:
             updated = value
-        setattr(instance, cache_name, (current, updated))
+        setattr(instance, cache_name, (current, updated, collection_changed))
 
     def get_collection(self, instance):
         filters = {}
@@ -185,10 +183,7 @@ class PositionField(models.IntegerField):
         queryset.filter(**{'%s__gt' % self.name: current}).update(**updates)
 
     def update_on_save(self, sender, instance, created, **kwargs):
-        collection_changed = self._collection_changed
-        self._collection_changed = None
-
-        current, updated = getattr(instance, self.get_cache_name())
+        current, updated, collection_changed = getattr(instance, self.get_cache_name())
 
         if updated is None and collection_changed == False:
             return None
@@ -215,7 +210,7 @@ class PositionField(models.IntegerField):
             updates[self.name] = models.F(self.name) + 1
 
         queryset.update(**updates)
-        setattr(instance, self.get_cache_name(), (updated, None))
+        setattr(instance, self.get_cache_name(), (updated, None, collection_changed))
 
     def south_field_triple(self):
         from south.modelsinspector import introspector
