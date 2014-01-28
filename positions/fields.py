@@ -50,7 +50,6 @@ class PositionField(models.IntegerField):
             if getattr(field, 'auto_now', False):
                 self.auto_now_fields.append(field)
         setattr(cls, self.name, self)
-        pre_delete.connect(self.prepare_delete, sender=cls)
         post_delete.connect(self.update_on_delete, sender=cls)
         post_save.connect(self.update_on_save, sender=cls)
 
@@ -162,15 +161,6 @@ class PositionField(models.IntegerField):
             model = model._meta.get_field(parent_link).rel.to
         return model._default_manager.filter(**filters)
 
-    def get_next_sibling(self, instance):
-        """
-        Returns the next sibling of this instance.
-        """
-        try:
-            return self.get_collection(instance).filter(**{'%s__gt' % self.name: getattr(instance, self.get_cache_name())[0]})[0]
-        except:
-            return None
-
     def remove_from_collection(self, instance):
         """
         Removes a positioned item from the collection.
@@ -184,31 +174,15 @@ class PositionField(models.IntegerField):
                 updates[field.name] = right_now
         queryset.filter(**{'%s__gt' % self.name: current}).update(**updates)
 
-    def prepare_delete(self, sender, instance, **kwargs):
-        next_sibling = self.get_next_sibling(instance)
-        if next_sibling:
-            setattr(instance, '_next_sibling_pk', next_sibling.pk)
-        else:
-            setattr(instance, '_next_sibling_pk', None)
-        pass
-
     def update_on_delete(self, sender, instance, **kwargs):
-        next_sibling_pk = getattr(instance, '_next_sibling_pk', None)
-        if next_sibling_pk:
-            try:
-                next_sibling = type(instance)._default_manager.get(pk=next_sibling_pk)
-            except:
-                next_sibling = None
-            if next_sibling:
-                queryset = self.get_collection(next_sibling)
-                current = getattr(instance, self.get_cache_name())[0]
-                updates = {self.name: models.F(self.name) - 1}
-                if self.auto_now_fields:
-                    right_now = now()
-                    for field in self.auto_now_fields:
-                        updates[field.name] = right_now
-                queryset.filter(**{'%s__gt' % self.name: current}).update(**updates)
-        setattr(instance, '_next_sibling_pk', None)
+        queryset = self.get_collection(instance)
+        current = getattr(instance, self.get_cache_name())[0]
+        updates = {self.name: models.F(self.name) - 1}
+        if self.auto_now_fields:
+            right_now = now()
+            for field in self.auto_now_fields:
+                updates[field.name] = right_now
+        queryset.filter(**{'%s__gt' % self.name: current}).update(**updates)
 
     def update_on_save(self, sender, instance, created, **kwargs):
         collection_changed = self._collection_changed
