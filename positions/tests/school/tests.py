@@ -1,7 +1,8 @@
 from positions.tests.school.models import SubUnit, Lesson, Exercise
 from django.test import TestCase
+from unittest import skip
 
-
+@skip
 class TestParentLink(TestCase):
     def test_parent_link(self):
         american_revolution = SubUnit.objects.create(name="American Revolution")

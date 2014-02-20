@@ -1,11 +1,14 @@
 from __future__ import unicode_literals
+
 from django.test.testcases import TestCase
+from django.utils.unittest.case import skip
 from positions.tests.lists.models import List, Item
 
+@skip
 class WithRespectToParentTestCase(TestCase):
     def setUp(self):
         self.list = List.objects.create(name='To Do')
-        
+
     def assertItemsEqualsList(self, values):
         qs = self.list.items.values_list('name', 'position').order_by('position')
         return self.assertQuerysetEqual(qs, values, transform=tuple)
@@ -37,7 +40,7 @@ class WithRespectToParentTestCase(TestCase):
         # create a couple more items
         self.create_items('Drink less Coke', 'Go to Bed')
         self.assertItemsEqualsList([('Write Tests', 0), ('Exercise', 1), ('Drink less Coke', 2), ('Go to Bed', 3)])
-        
+
     def test_moving(self):
         self.create_items('Write Tests', 'Exercise', 'Drink less Coke', 'Go to Bed')
         # move item to end using None
@@ -71,7 +74,7 @@ class WithRespectToParentTestCase(TestCase):
         self.assertLess(eat_better_updated, todo_list[1].updated) # this item
         self.assertLess(excersize_updated, todo_list[2].updated)  # and this one was updated, other's not
         self.assertEqual(write_tests_updated, todo_list[3].updated)
-        
+
     def test_create_item_using_negative_index_or_zero_index(self):
         # create an item using negative index
         # http://github.com/jpwatts/django-positions/issues/#issue/5
