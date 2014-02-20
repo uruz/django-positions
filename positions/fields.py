@@ -2,7 +2,8 @@ import datetime
 import warnings
 
 from django.db import models
-from django.db.models.signals import post_delete, post_save, pre_delete
+from django.db.models.signals import post_delete, post_save
+
 
 try:
     from django.utils.timezone import now
