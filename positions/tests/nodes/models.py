@@ -7,4 +7,4 @@ class Node(models.Model):
     position = PositionField(collection='parent')
 
     def __unicode__(self):
-       return self.name
+        return self.name

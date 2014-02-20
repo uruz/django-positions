@@ -2,7 +2,8 @@ import datetime
 import warnings
 
 from django.db import models
-from django.db.models.signals import post_delete, post_save, pre_delete
+from django.db.models.signals import post_delete, post_save
+
 
 try:
     from django.utils.timezone import now
@@ -14,6 +15,39 @@ try:
     basestring
 except NameError:
     basestring = (str, bytes)
+
+
+class Position(object):
+    END = -1
+
+    def __init__(self, position):
+        self.position = position
+        if position is None:
+            position = self.END
+        elif isinstance(position, int):
+            if position < Position.END:
+                raise Exception('It is not allowed to specify values less than -1')
+        else:
+            raise Exception('Position should be either integer or None')
+
+    @property
+    def is_end(self):
+        return self.position == self.END
+
+    @is_end.setter
+    def set_is_end(self, value):
+        self.position = self.END
+
+
+class FMax(object):
+    def __init__(self, queryset, fieldname):
+        self.queryset = queryset
+        self.fieldname = fieldname
+
+    def as_sql(self, qs, connection):
+        queryset = self.queryset.exclude(position = Position.END).select_for_update().values_list(self.fieldname)
+        sql = str(queryset.query)
+        return '(SELECT COUNT(*) FROM ({sql}) as aliased)'.format(sql=sql), ()
 
 
 class PositionField(models.IntegerField):
@@ -44,7 +78,6 @@ class PositionField(models.IntegerField):
             collection = (collection,)
         self.collection = collection
         self.parent_link = parent_link
-        self._collection_changed =  None
 
     def contribute_to_class(self, cls, name):
         super(PositionField, self).contribute_to_class(cls, name)
@@ -56,13 +89,14 @@ class PositionField(models.IntegerField):
             if getattr(field, 'auto_now', False):
                 self.auto_now_fields.append(field)
         setattr(cls, self.name, self)
-        pre_delete.connect(self.prepare_delete, sender=cls)
         post_delete.connect(self.update_on_delete, sender=cls)
         post_save.connect(self.update_on_save, sender=cls)
 
-    def get_internal_type(self):
-        # pre_save always returns a value >= 0
-        return 'PositiveIntegerField'
+    def get_prep_value(self, value):
+        '''Integer field used to do int(value). We don't need this as we has FMax class'''
+        if value is None:
+            return None
+        return value
 
     def pre_save(self, model_instance, add):
         #NOTE: check if the node has been moved to another collection; if it has, delete it from the old collection.
@@ -80,19 +114,18 @@ class PositionField(models.IntegerField):
         if not collection_changed:
             previous_instance = None
 
-        self._collection_changed = collection_changed
         if collection_changed:
             self.remove_from_collection(previous_instance)
 
         cache_name = self.get_cache_name()
-        current, updated = getattr(model_instance, cache_name)
+        current, updated, _ = getattr(model_instance, cache_name)
 
         if collection_changed:
             current = None
 
         if add:
             if updated is None:
-                updated = current
+                updated = Position(Position.END)
             current = None
         elif updated is None:
             updated = -1
@@ -108,36 +141,38 @@ class PositionField(models.IntegerField):
             max_position = collection_count - 1
         min_position = 0
 
-        # new instance; appended; no cleanup required on post_save
-        if add and (updated == -1 or updated >= max_position):
-            setattr(model_instance, cache_name, (max_position, None))
-            return max_position
-
-        if max_position >= updated >= min_position:
-            # positive position; valid index
-            position = updated
-        elif updated > max_position:
-            # positive position; invalid index
-            position = max_position
-        elif abs(updated) <= (max_position + 1):
-            # negative position; valid index
-
-            # Add 1 to max_position to make this behave like a negative list index.
-            # -1 means the last position, not the last position minus 1
-
-            position = max_position + 1 + updated
+        # new instance; appended; cleanup required on post_save
+        if add:
+            if updated.position >= max_position: #fragile check
+                updated.is_end = True
+            position = updated.position # may return -1
         else:
-            # negative position; invalid index
-            position = min_position
+            if max_position >= updated.position >= min_position:
+                # positive position; valid index
+                position = updated.position
+            elif updated.position > max_position:
+                # positive position; invalid index
+                position = Position.END
+            elif abs(updated.position) <= (max_position + 1):
+                # Impossible case, as I've prohibited that (for now)
+                # negative position; valid index
+
+                # Add 1 to max_position to make this behave like a negative list index.
+                # -1 means the last position, not the last position minus 1
+
+                position = max_position + 1 + updated.position
+            else:
+                # negative position; invalid index
+                position = min_position
 
         # instance inserted; cleanup required on post_save
-        setattr(model_instance, cache_name, (current, position))
+        setattr(model_instance, cache_name, (current, position, collection_changed))
         return position
 
     def __get__(self, instance, owner):
         if instance is None:
             raise AttributeError("%s must be accessed via instance." % self.name)
-        current, updated = getattr(instance, self.get_cache_name())
+        current, updated, _ = getattr(instance, self.get_cache_name())
         return current if updated is None else updated
 
     def __set__(self, instance, value):
@@ -147,12 +182,14 @@ class PositionField(models.IntegerField):
             value = self.default
         cache_name = self.get_cache_name()
         try:
-            current, updated = getattr(instance, cache_name)
+            current, updated, collection_changed = getattr(instance, cache_name)
         except AttributeError:
-            current, updated = value, None
+            current, updated, collection_changed = value, None, False
         else:
+            if not isinstance(value, Position) or value is not None:
+                value = Position(value)
             updated = value
-        setattr(instance, cache_name, (current, updated))
+        setattr(instance, cache_name, (current, updated, collection_changed))
 
     def get_collection(self, instance):
         filters = {}
@@ -170,15 +207,6 @@ class PositionField(models.IntegerField):
             model = model._meta.get_field(parent_link).rel.to
         return model._default_manager.filter(**filters)
 
-    def get_next_sibling(self, instance):
-        """
-        Returns the next sibling of this instance.
-        """
-        try:
-            return self.get_collection(instance).filter(**{'%s__gt' % self.name: getattr(instance, self.get_cache_name())[0]})[0]
-        except:
-            return None
-
     def remove_from_collection(self, instance):
         """
         Removes a positioned item from the collection.
@@ -192,40 +220,21 @@ class PositionField(models.IntegerField):
                 updates[field.name] = right_now
         queryset.filter(**{'%s__gt' % self.name: current}).update(**updates)
 
-    def prepare_delete(self, sender, instance, **kwargs):
-        next_sibling = self.get_next_sibling(instance)
-        if next_sibling:
-            setattr(instance, '_next_sibling_pk', next_sibling.pk)
-        else:
-            setattr(instance, '_next_sibling_pk', None)
-        pass
-
     def update_on_delete(self, sender, instance, **kwargs):
-        next_sibling_pk = getattr(instance, '_next_sibling_pk', None)
-        if next_sibling_pk:
-            try:
-                next_sibling = type(instance)._default_manager.get(pk=next_sibling_pk)
-            except:
-                next_sibling = None
-            if next_sibling:
-                queryset = self.get_collection(next_sibling)
-                current = getattr(instance, self.get_cache_name())[0]
-                updates = {self.name: models.F(self.name) - 1}
-                if self.auto_now_fields:
-                    right_now = now()
-                    for field in self.auto_now_fields:
-                        updates[field.name] = right_now
-                queryset.filter(**{'%s__gt' % self.name: current}).update(**updates)
-        setattr(instance, '_next_sibling_pk', None)
+        queryset = self.get_collection(instance)
+        current = getattr(instance, self.get_cache_name())[0]
+        updates = {self.name: models.F(self.name) - 1}
+        if self.auto_now_fields:
+            right_now = now()
+            for field in self.auto_now_fields:
+                updates[field.name] = right_now
+        queryset.filter(**{'%s__gt' % self.name: current}).update(**updates)
 
     def update_on_save(self, sender, instance, created, **kwargs):
-        collection_changed = self._collection_changed
-        self._collection_changed = None
+        current, updated, collection_changed = getattr(instance, self.get_cache_name())
 
-        current, updated = getattr(instance, self.get_cache_name())
-
-        if updated is None and collection_changed == False:
-            return None
+        if updated is None and not collection_changed and current != Position.END:
+            return
 
         queryset = self.get_collection(instance).exclude(pk=instance.pk)
 
@@ -239,9 +248,13 @@ class PositionField(models.IntegerField):
             updated = -1
 
         if created or collection_changed:
-            # increment positions gte updated or node moved from another collection
-            queryset = queryset.filter(**{'%s__gte' % self.name: updated})
-            updates[self.name] = models.F(self.name) + 1
+            if (current == Position.END and updated is None) or updated == Position.END:
+                # position should be at the end
+                self.model._default_manager.filter(pk = instance.pk).update(**{self.name: FMax(queryset, self.name)})
+            else:
+                # increment positions gte updated or node moved from another collection
+                queryset = queryset.filter(**{'%s__gte' % self.name: updated})
+                updates[self.name] = models.F(self.name) + 1
         elif updated > current:
             # decrement positions gt current and lte updated
             queryset = queryset.filter(**{'%s__gt' % self.name: current, '%s__lte' % self.name: updated})
@@ -252,7 +265,8 @@ class PositionField(models.IntegerField):
             updates[self.name] = models.F(self.name) + 1
 
         queryset.update(**updates)
-        setattr(instance, self.get_cache_name(), (updated, None))
+        updated = getattr(self.model._default_manager.get(pk = instance.pk), self.name)
+        setattr(instance, self.get_cache_name(), (updated, None, collection_changed))
 
     def south_field_triple(self):
         from south.modelsinspector import introspector
