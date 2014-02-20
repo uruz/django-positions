@@ -28,4 +28,5 @@ NOSE_ARGS = [
     '--cover-html',
     '--cover-html-dir=%s' % coverage_dir,
     '--cover-inclusive',
+    '-s',
 ]
